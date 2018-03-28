@@ -49,11 +49,11 @@ The tolerance on the neopixel signal is ±300ns per bit.
 Given we are simulating the neopixel signal with this SPI signal, here is as
 close as we could possible get:
 
-| What  | SPI signal | High  | Low   | High   | Low   | High | Low  |
-| :---  | ---        | ---:  |  ---: | ---:   | ---:  | ---: | ---: |
-| 0-bit | 1110000000 | 384ns | 896ns | -16ns  | +46ns | -4%  | +5%  |
-| 1-bit | 1111110000 | 768ns | 512ns | -32ns  | +62ns | -4%  | +14% |
-| reset | >391 x 0   |       | >50µs |        | +48ns |      |      |
+| What  | SPI signal   | High  | Low   | High   | Low   | High | Low  |
+| :---  | ---          | ---:  |  ---: | ---:   | ---:  | ---: | ---: |
+| 0-bit | `1110000000` | 384ns | 896ns | -16ns  | +46ns | -4%  | +5%  |
+| 1-bit | `1111110000` | 768ns | 512ns | -32ns  | +62ns | -4%  | +14% |
+| reset | >391 x `0`   |       | >50µs |        | +48ns |      |      |
 
 This is very close!
 
@@ -66,9 +66,9 @@ required sending 10 bits per neopixel bit is less-convenient than one which uses
 
 | What  | SPI signal | High  | Low   | High   | Low    | High | Low v|
 | :---  | ---        | ---:  |  ---: | ---:   | ---:   | ---: | ---: |
-| 0-bit | 11000000   | 256ns | 768ns | -144ns | -82ns  | -36% | -10% |
-| 1-bit | 11111000   | 640ns | 384ns | -160ns | -66ns  | -20% | -15% |
-| reset | >392 x 0   |       | >50µs |        | +176ns |      |      |
+| 0-bit | `11000000` | 256ns | 768ns | -144ns | -82ns  | -36% | -10% |
+| 1-bit | `11111000` | 640ns | 384ns | -160ns | -66ns  | -20% | -15% |
+| reset | >392 x `0` |       | >50µs |        | +176ns |      |      |
 
 This isn't great: I don't like planning to use so much of the signal tolerance
 just to make things more convenient for the software, as it leaves less margin
