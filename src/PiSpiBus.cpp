@@ -7,7 +7,7 @@
 #include <system_error>
 
 namespace {
-constexpr size_t kBusResetLength{45};
+constexpr size_t kBusResetLength{17};  // Length is in neopixels
 constexpr size_t kBusFrequency{7000000};
 }  // namespace
 
