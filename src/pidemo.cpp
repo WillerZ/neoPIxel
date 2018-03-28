@@ -1,7 +1,7 @@
 #include "PiSpiBus.h"
 
-#include <vector>
 #include <cstring>
+#include <vector>
 
 namespace {
 struct CommandLinePixel {
