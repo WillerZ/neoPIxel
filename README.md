@@ -3,7 +3,7 @@ A neopixel management library for Raspberry Pi
 
 I'm using a Raspberry Pi 3 B+, but it probably works on others.
 
-## Setup
+# System Setup
 
 1. [Enable the SPI master driver](https://www.raspberrypi.org/documentation/hardware/raspberrypi/spi/README.md)
 2. Connect the MOSI pin (pin 19 on the P1 header) to the neopixel chain control input.
@@ -11,12 +11,12 @@ I'm using a Raspberry Pi 3 B+, but it probably works on others.
 4. Give your neopixels an adequate power supply. I have found that the +5V or +3.3V pins from the Raspberry Pi are adequate for small numbers of neopixels.
 5. Make sure that the Raspberry Pi and the neopixels share a common ground.
 
-## Project Design
+# Project Design
 
 This (ab)uses one of the SPI buses on the Raspberry Pi to produce the signal
 pattern that the neopixels expect.
 
-## Signaling in theory
+## Signaling - Ideal theory
 
 The SPI bus provides high-frequency signalling with the straightforward encoding
 that a 1-bit is signal-high and a 0-bit is signal low. There's a separate clock
@@ -57,7 +57,7 @@ close as we could possible get:
 
 This is very close, and well-within the stated tolerances.
 
-## Signaling in practice
+## Signaling - Pragmatic theory
 
 Unfortunately those SPI signal patterns are a little inconvenient for us to
 produce. The raspberry pi software model uses an 8-bit byte and a design that
@@ -70,14 +70,12 @@ required sending 10 bits per neopixel bit is less-convenient than one which uses
 | 1-bit | `11111000` | 640ns | 384ns | -160ns | -66ns  | -20% | -15% |
 | reset | >392 x `0` |       | >50µs |        | +176ns |      |      |
 
-### Initial thoughts
-
 This isn't great: it isn't even within the stated design tolerances. Even if it
 were, I don't like planning to use so much of the signal tolerance just to make
 things more convenient for the software, as it leaves less margin for hardware
 variations.
 
-### In practice
+## Signaling - In practice
 
 I coded up the 10-bit signaling system and it did not work as well as the 8-bit
 signaling system. Here are some reasonably plausible explanations for this:
@@ -87,3 +85,20 @@ signaling system. Here are some reasonably plausible explanations for this:
 * The Raspberry Pi SPI bus clock rate is slower than its nominal 7.8MHz, so the
   8-bit signaling comes out roughly correct and the 10-bit signaling is too
   slow.
+
+# Counting the neopixels
+
+Each neopixel grabs the first 24 neopixel-bits (SPI-bytes) of the signal that it
+sees, emitting only a signal-low from its control-out pin during that time.
+After that it passes the signal through until it sees over 50µs of signal-low on
+its control-in pin, when it changes to the stored color and begins looking for
+the next signal block.
+
+So if we connect the control-out pin of the last neopixel in the
+chain to the MISO pin of the raspberry pi and do a synchronized read/write
+operation on the SPI bus, the number of leading zero bytes we get back is a
+measure of how many neopixel-bits were absorbed. If we then divide that by 24
+we get the number of neopixels in the chain.
+
+I anticipate that this will be useful, for example to automatically generate
+demo modes that can scale an animation to the number of pixels available.
