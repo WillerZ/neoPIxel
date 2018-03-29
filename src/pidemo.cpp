@@ -2,26 +2,19 @@
 
 #include <cstring>
 #include <iostream>
-#include <vector>
-
-namespace {
-struct CommandLinePixel {
-  unsigned char r, g, b;
-  constexpr unsigned char red() const { return r; }
-  constexpr unsigned char green() const { return g; }
-  constexpr unsigned char blue() const { return b; }
-};
-}  // namespace
 
 using namespace neoPIxel;
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   PiSpiBus defaultBus;
+  size_t count = 0;
   try {
-    std::cout << "There are " << defaultBus.countPixels() << " lights.";
-  } catch (CountException const&) {
+    count = defaultBus.countPixels();
+  } catch (CountException const &) {
+    std::cerr << "Counting failed." << std::endl;
   }
-  std::vector<CommandLinePixel> cmdPixels(argc - 1);
+  std::cout << "There are " << count << " lights." << std::endl;
+  auto pixels = PiSpiBuffer(argc - 1);
   for (int i = 1; i < argc; ++i) {
     auto len = std::strlen(argv[i]);
     unsigned char red, green, blue;
@@ -35,9 +28,11 @@ int main(int argc, char** argv) {
     } else {
       continue;
     }
-    cmdPixels[i - 1] = {red, green, blue};
+    auto &pixel = pixels[i - 1];
+    pixel.red().setIntensity(red);
+    pixel.green().setIntensity(green);
+    pixel.blue().setIntensity(blue);
   }
-  auto prepped = defaultBus.preparePixels(cmdPixels.begin(), cmdPixels.end());
-  defaultBus.displayPixels(*prepped);
+  defaultBus.displayPixels(pixels);
   return 0;
 }

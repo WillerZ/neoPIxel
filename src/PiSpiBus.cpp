@@ -1,6 +1,7 @@
 #include "PiSpiBus.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/spi/spidev.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -9,27 +10,10 @@
 
 namespace {
 constexpr int kBusFrequency{7800000};
-constexpr size_t kMaximumPixelsForProbing{1000};
-}  // namespace
+constexpr size_t kMaximumPixelsForProbing{100};
+} // namespace
 
 using namespace neoPIxel;
-
-void PiSpiBuffer::display(int fd) const {
-  unsigned char const* pBuffer = static_cast<unsigned char const*>(
-      static_cast<void const*>(pixels_.data()));
-  size_t bufferSize = pixels_.size() * sizeof(PiSpiPixel);
-  while (true) {
-    auto wrote = write(fd, pBuffer, bufferSize);
-    if (wrote < 0) {
-      throw std::system_error(errno, std::system_category());
-    }
-    if (static_cast<size_t>(wrote) == bufferSize) {
-      break;
-    }
-    pBuffer += wrote;
-    bufferSize -= wrote;
-  }
-}
 
 PiSpiBus::PiSpiBus() {
   fd_ = open("/dev/spidev0.0", O_RDWR);
@@ -62,11 +46,12 @@ size_t PiSpiBus::countPixels() const {
     outBuffer[i].green().setIntensity(0);
     outBuffer[i].blue().setIntensity(0);
   }
-  auto inBuffer = outBuffer;
+  auto length = outBuffer.length();
+  auto inBuffer = std::unique_ptr<unsigned char[]>(new unsigned char[length]);
   spi_ioc_transfer spi_transfer{};
-  spi_transfer.tx_buf = static_cast<unsigned long>(outBuffer.data());
-  spi_transfer.rx_buf = static_cast<unsigned long>(inBuffer.data());
-  spi_transfer.len = inBuffer.length();
+  spi_transfer.tx_buf = reinterpret_cast<unsigned long>(outBuffer.data());
+  spi_transfer.rx_buf = reinterpret_cast<unsigned long>(inBuffer.get());
+  spi_transfer.len = length;
   spi_transfer.delay_usecs = 0;
   spi_transfer.speed_hz = kBusFrequency;
   spi_transfer.bits_per_word = 8;
@@ -74,18 +59,32 @@ size_t PiSpiBus::countPixels() const {
   if (rc < 0) {
     throw std::system_error(errno, std::system_category(), "tx/rx SPI Message");
   }
-  for (size_t i = 0UL; i < kMaximumPixelsForProbing; ++i) {
-    if (outBuffer[i] == inBuffer[i]) {
-      return i;
+  for (size_t i = 0UL; i < length; ++i) {
+    if (inBuffer[i] != 0) {
+      return i / sizeof(PiSpiPixel);
     }
   }
-  throw CountException("Couldn't count pixels");
+  throw CountException();
 }
 
-PiSpiBus::~PiSpiBus() {
-  close(fd_);
+PiSpiBus::~PiSpiBus() { close(fd_); }
+
+void PiSpiBus::displayPixels(PiSpiBuffer const &buffer) {
+  auto pBuffer = buffer.data();
+  auto bufferSize = buffer.length();
+  while (true) {
+    auto wrote = write(fd_, pBuffer, bufferSize);
+    if (wrote < 0) {
+      throw std::system_error(errno, std::system_category());
+    }
+    if (static_cast<size_t>(wrote) == bufferSize) {
+      break;
+    }
+    pBuffer += wrote;
+    bufferSize -= wrote;
+  }
 }
 
-void PiSpiBus::displayPixels(PiSpiBuffer const& buffer) {
-  buffer.display(fd_);
+char const *CountException::what() const noexcept {
+  return "Could not count pixels";
 }
