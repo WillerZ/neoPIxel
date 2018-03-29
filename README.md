@@ -7,14 +7,14 @@ I'm using a Raspberry Pi 3 B+, but it probably works on others.
 
 1. [Enable the SPI master driver](https://www.raspberrypi.org/documentation/hardware/raspberrypi/spi/README.md)
 2. Connect the MOSI pin (pin 19 on the P1 header) to the neopixel chain control input.
-3. Not used yet, but I plan to connect the MISO pin (pin 21 on the P1 header) to the neopixel chain control input.
-4. Give your neopixels an adequate power supply. I have found that the +5V pin from the Raspberry Pi is enough for small numbers of neopixels.
+3. Connect the MISO pin (pin 21 on the P1 header) to the neopixel chain control output. This is only required if you want the `countPixels()` API to work.
+4. Give your neopixels an adequate power supply. I have found that the +5V or +3.3V pins from the Raspberry Pi are adequate for small numbers of neopixels.
 5. Make sure that the Raspberry Pi and the neopixels share a common ground.
 
 ## Project Design
 
 This (ab)uses one of the SPI buses on the Raspberry Pi to produce the signal
-pattern that the neopixels require.
+pattern that the neopixels expect.
 
 ## Signaling in theory
 
@@ -55,7 +55,7 @@ close as we could possible get:
 | 1-bit | `1111110000` | 768ns | 512ns | -32ns  | +62ns | -4%  | +14% |
 | reset | >391 x `0`   |       | >50µs |        | +48ns |      |      |
 
-This is very close!
+This is very close, and well-within the stated tolerances.
 
 ## Signaling in practice
 
@@ -70,7 +70,20 @@ required sending 10 bits per neopixel bit is less-convenient than one which uses
 | 1-bit | `11111000` | 640ns | 384ns | -160ns | -66ns  | -20% | -15% |
 | reset | >392 x `0` |       | >50µs |        | +176ns |      |      |
 
-This isn't great: I don't like planning to use so much of the signal tolerance
-just to make things more convenient for the software, as it leaves less margin
-for hardware variations. On the other hand it does seem to work pretty well with
-the neopixels and Raspberry Pi that I have access to.
+### Initial thoughts
+
+This isn't great: it isn't even within the stated design tolerances. Even if it
+were, I don't like planning to use so much of the signal tolerance just to make
+things more convenient for the software, as it leaves less margin for hardware
+variations.
+
+### In practice
+
+I coded up the 10-bit signaling system and it did not work as well as the 8-bit
+signaling system. Here are some reasonably plausible explanations for this:
+
+* The neopixel tolerance is not symmetrical, and accelerating the protocol up to
+  36% is tolerated better than slowing it by 14%
+* The Raspberry Pi SPI bus clock rate is slower than its nominal 7.8MHz, so the
+  8-bit signaling comes out roughly correct and the 10-bit signaling is too
+  slow.
