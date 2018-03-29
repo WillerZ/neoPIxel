@@ -1,6 +1,7 @@
 #include "PiSpiBus.h"
 
 #include <cstring>
+#include <iostream>
 #include <vector>
 
 namespace {
@@ -16,6 +17,10 @@ using namespace neoPIxel;
 
 int main(int argc, char** argv) {
   PiSpiBus defaultBus;
+  try {
+    std::cout << "There are " << defaultBus.countPixels() << " lights.";
+  } catch (CountException const&) {
+  }
   std::vector<CommandLinePixel> cmdPixels(argc - 1);
   for (int i = 1; i < argc; ++i) {
     auto len = std::strlen(argv[i]);

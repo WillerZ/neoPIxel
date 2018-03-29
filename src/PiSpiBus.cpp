@@ -1,55 +1,19 @@
 #include "PiSpiBus.h"
 
 #include <errno.h>
+#include <linux/spi/spidev.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
-#include <wiringPiSPI.h>
 
 #include <system_error>
 
 namespace {
-constexpr size_t kBusResetLength{17};  // Length is in neopixels
-constexpr size_t kBusFrequency{7000000};
+constexpr int kBusFrequency{7800000};
+constexpr size_t kMaximumPixelsForProbing{1000};
 }  // namespace
 
 using namespace neoPIxel;
 
-void PiSpiPixel::setGreen(unsigned char value) {
-  busValues_[0] = (value & 0x80) ? kOne : kZero;
-  busValues_[1] = (value & 0x40) ? kOne : kZero;
-  busValues_[2] = (value & 0x20) ? kOne : kZero;
-  busValues_[3] = (value & 0x10) ? kOne : kZero;
-  busValues_[4] = (value & 0x08) ? kOne : kZero;
-  busValues_[5] = (value & 0x04) ? kOne : kZero;
-  busValues_[6] = (value & 0x02) ? kOne : kZero;
-  busValues_[7] = (value & 0x01) ? kOne : kZero;
-}
-
-void PiSpiPixel::setRed(unsigned char value) {
-  busValues_[8] = (value & 0x80) ? kOne : kZero;
-  busValues_[9] = (value & 0x40) ? kOne : kZero;
-  busValues_[10] = (value & 0x20) ? kOne : kZero;
-  busValues_[11] = (value & 0x10) ? kOne : kZero;
-  busValues_[12] = (value & 0x08) ? kOne : kZero;
-  busValues_[13] = (value & 0x04) ? kOne : kZero;
-  busValues_[14] = (value & 0x02) ? kOne : kZero;
-  busValues_[15] = (value & 0x01) ? kOne : kZero;
-}
-
-void PiSpiPixel::setBlue(unsigned char value) {
-  busValues_[16] = (value & 0x80) ? kOne : kZero;
-  busValues_[17] = (value & 0x40) ? kOne : kZero;
-  busValues_[18] = (value & 0x20) ? kOne : kZero;
-  busValues_[19] = (value & 0x10) ? kOne : kZero;
-  busValues_[20] = (value & 0x08) ? kOne : kZero;
-  busValues_[21] = (value & 0x04) ? kOne : kZero;
-  busValues_[22] = (value & 0x02) ? kOne : kZero;
-  busValues_[23] = (value & 0x01) ? kOne : kZero;
-}
-
-PiSpiBuffer::PiSpiBuffer(size_t size) : pixels_(size + kBusResetLength) {}
-PiSpiPixel& PiSpiBuffer::operator[](size_t index) {
-  return pixels_[index];
-}
 void PiSpiBuffer::display(int fd) const {
   unsigned char const* pBuffer = static_cast<unsigned char const*>(
       static_cast<void const*>(pixels_.data()));
@@ -68,10 +32,54 @@ void PiSpiBuffer::display(int fd) const {
 }
 
 PiSpiBus::PiSpiBus() {
-  fd_ = wiringPiSPISetup(0, kBusFrequency);
+  fd_ = open("/dev/spidev0.0", O_RDWR);
   if (fd_ < 0) {
-    throw std::system_error(errno, std::system_category());
+    throw std::system_error(errno, std::system_category(), "opening spidev0.0");
   }
+  int mode = 0;
+  auto rc = ioctl(fd_, SPI_IOC_WR_MODE, &mode);
+  if (rc < 0) {
+    throw std::system_error(errno, std::system_category(), "setting mode 0");
+  }
+  int bpw = 8;
+  rc = ioctl(fd_, SPI_IOC_WR_BITS_PER_WORD, &bpw);
+  if (rc < 0) {
+    throw std::system_error(errno, std::system_category(),
+                            "setting 8 bits per word");
+  }
+  int speed = kBusFrequency;
+  rc = ioctl(fd_, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
+  if (rc < 0) {
+    throw std::system_error(errno, std::system_category(),
+                            "setting bus frequency");
+  }
+}
+
+size_t PiSpiBus::countPixels() const {
+  PiSpiBuffer outBuffer{kMaximumPixelsForProbing};
+  for (size_t i = 0UL; i < kMaximumPixelsForProbing; ++i) {
+    outBuffer[i].red().setIntensity(0);
+    outBuffer[i].green().setIntensity(0);
+    outBuffer[i].blue().setIntensity(0);
+  }
+  auto inBuffer = outBuffer;
+  spi_ioc_transfer spi_transfer{};
+  spi_transfer.tx_buf = static_cast<unsigned long>(outBuffer.data());
+  spi_transfer.rx_buf = static_cast<unsigned long>(inBuffer.data());
+  spi_transfer.len = inBuffer.length();
+  spi_transfer.delay_usecs = 0;
+  spi_transfer.speed_hz = kBusFrequency;
+  spi_transfer.bits_per_word = 8;
+  auto rc = ioctl(fd_, SPI_IOC_MESSAGE(1), &spi_transfer);
+  if (rc < 0) {
+    throw std::system_error(errno, std::system_category(), "tx/rx SPI Message");
+  }
+  for (size_t i = 0UL; i < kMaximumPixelsForProbing; ++i) {
+    if (outBuffer[i] == inBuffer[i]) {
+      return i;
+    }
+  }
+  throw CountException("Couldn't count pixels");
 }
 
 PiSpiBus::~PiSpiBus() {
@@ -80,26 +88,4 @@ PiSpiBus::~PiSpiBus() {
 
 void PiSpiBus::displayPixels(PiSpiBuffer const& buffer) {
   buffer.display(fd_);
-}
-
-std::unique_ptr<PiSpiBuffer> PiSpiBus::allocatePixels(size_t count) const {
-  return std::make_unique<PiSpiBuffer>(count);
-}
-
-void PiSpiBus::setRed(PiSpiBuffer& buffer,
-                      size_t index,
-                      unsigned char red) const {
-  buffer[index].setRed(red);
-}
-
-void PiSpiBus::setGreen(PiSpiBuffer& buffer,
-                        size_t index,
-                        unsigned char green) const {
-  buffer[index].setGreen(green);
-}
-
-void PiSpiBus::setBlue(PiSpiBuffer& buffer,
-                       size_t index,
-                       unsigned char blue) const {
-  buffer[index].setBlue(blue);
 }
